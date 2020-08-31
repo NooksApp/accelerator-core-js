@@ -1,24 +1,42 @@
 import OT from '@opentok/client';
+import SDKError from './errors';
 import {
   Credentials,
   StreamCollection,
   StreamType
 } from "./models";
 
-export default abstract class State {
+export default class State {
 
-  private static publishers: StreamCollection<OT.Publisher>;
-  private static subscribers: StreamCollection<OT.Subscriber>;
-  private static streams: Record<string, OT.Stream>;
-  private static streamMap: Record<string, string>;
-  public static isConnected: boolean;
-  public static session: OT.Session;
-  public static credentials: Credentials;
+  protected publishers: StreamCollection<OT.Publisher>;
+  protected subscribers: StreamCollection<OT.Subscriber>;
+  protected streams: Record<string, OT.Stream>;
+  protected streamMap: Record<string, string>;
+  public connected: boolean;
+  public session: OT.Session;
+
+  constructor(public credentials: Credentials) {
+    this.validateCredentials(credentials);
+  }
+
+  /**
+  * Ensures that we have the required credentials
+  * @param credentials Credentials for the OpenTok session/user
+  */
+  private validateCredentials(credentials: Credentials): void {
+    const required = ['apiKey', 'sessionId', 'token'];
+    required.forEach((credential) => {
+      if (!credentials[credential]) {
+        throw new SDKError(`${credential} is a required credential`, 'invalidParameters');
+      }
+    });
+    this.credentials = credentials;
+  };
 
   /**
    * Returns the count of current publishers and subscribers by type
    */
-  static pubSubCount() {
+  pubSubCount() {
     return {
       publisher: this.publishers.getCount(),
       subscriber: this.subscribers.getCount()
@@ -28,7 +46,7 @@ export default abstract class State {
   /**
    * Returns the current publishers and subscribers, along with a count of each
    */
-  static getPubSub() {
+  getPubSub() {
     return {
       publishers: this.publishers,
       subscribers: this.subscribers,
@@ -41,8 +59,9 @@ export default abstract class State {
    * @param type Type of stream
    * @param publisher Published stream
    */
-  static addPublisher(type: StreamType, publisher: OT.Publisher): void {
-    this.publishers.addStream(type, publisher)
+  addPublisher(type: StreamType, publisher: OT.Publisher): void {
+    this.publishers.addStream(type, publisher);
+    this.streamMap[publisher.stream.streamId] = publisher.id;
   }
 
   /**
@@ -50,14 +69,14 @@ export default abstract class State {
    * @param type Type of stream
    * @param publisher Published stream
    */
-  static removePublisher(type, publisher: OT.Publisher): void {
+  removePublisher(type, publisher: OT.Publisher): void {
     this.publishers.removeStream(type, publisher);
   }
 
   /**
    * Removes all publishers
    */
-  static removeAllPublishers(): void {
+  removeAllPublishers(): void {
     this.publishers.reset();
   }
 
@@ -65,7 +84,7 @@ export default abstract class State {
    * Adds subscriber
    * @param subscriber Subscriber to add
    */
-  static addSubscriber(subscriber: OT.Subscriber): void {
+  addSubscriber(subscriber: OT.Subscriber): void {
     this.subscribers.addStream(
       subscriber.stream.videoType as StreamType,
       subscriber);
@@ -76,17 +95,17 @@ export default abstract class State {
    * Removes a subscriber
    * @param subscriber Subscriber to remove
    */
-  static removeSubscriber(subscriber: OT.Subscriber): void {
+  removeSubscriber(subscriber: OT.Subscriber): void {
     this.subscribers.removeStream(
       subscriber.stream.videoType as StreamType,
       subscriber);
   }
 
-  static addStream(stream: OT.Stream) {
+  addStream(stream: OT.Stream) {
     this.streams[stream.streamId] = stream;
   }
 
-  static removeStream(stream: OT.Stream) {
+  removeStream(stream: OT.Stream) {
     const type = stream.videoType;
     const subscriberId = this.streamMap[stream.streamId];
     delete this.streamMap[stream.streamId];
@@ -97,17 +116,26 @@ export default abstract class State {
   /**
    * Retrieves all streams
    */
-  static getStreams() {
+  getStreams() {
     return this.streams;
   }
 
   /**
    * Reset publishers, and subscribers
    */
-  static reset() {
+  reset() {
     this.publishers.reset();
     this.subscribers.reset();
     this.streamMap = {};
     this.streams = {};
+  }
+
+  all() {
+    return Object.assign(
+      this.streams,
+      this.streamMap,
+      this.connected,
+      this.getPubSub()
+    );
   }
 }

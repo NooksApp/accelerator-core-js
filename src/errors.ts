@@ -1,14 +1,15 @@
 /**
- * Defines errors emitted from the SDK
+ * Errors 
  */
-export default class SDKError extends Error {
+export default class CoreError extends Error {
   constructor(
     public errorMessage: string,
     public errorName: string,
     public stack?: string
   ) {
-    super(`otSDK: ${errorMessage}`);
+    super(`otAccCore: ${errorMessage}`);
     this.name = errorName;
     this.stack = stack;
   }
 }
+
