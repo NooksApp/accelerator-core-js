@@ -1,9 +1,18 @@
-/* global OT */
+import CoreError from './errors';
+import {
+  AnalyticsOptions,
+  AnnotationOptions,
+  ArchivingOptions,
+  CommunicationOptions
+  CoreOptions,
+  Options,
+  ScreenSharingOptions,
+  StateOptions,
+  TextChatOptions
+} from './models';
 
-/** Dependencies */
-const { CoreError } = require('./errors');
-const { dom, path, pathOr, properCase } = require('./util');
-const { message, logAction, logVariation } = require('./logging');
+import { dom, path, pathOr, properCase } from './util';
+import { message, LogAction, LogVariation } from './logging';
 
 /**
  * Default UI propties
@@ -18,20 +27,28 @@ const defaultCallProperties = {
     buttonDisplayMode: 'off',
   },
 };
-class Communication {
-  constructor(options) {
+export default class Communication {
+
+  active: boolean;
+  core: CoreOptions;
+  analytics: AnalyticsOptions;
+  state: StateOptions;
+
+
+  constructor(options: Options) {
     this.validateOptions(options);
     this.setSession();
     this.createEventListeners();
   }
 
-  validateOptions = (options) => {
+  validateOptions(options: Options) {
     const requiredOptions = ['core', 'state', 'analytics'];
     requiredOptions.forEach((option) => {
       if (!options[option]) {
         throw new CoreError(`${option} is a required option.`, 'invalidParameters');
       }
     });
+
     const { callProperties, screenProperties, autoSubscribe, subscribeOnly } = options;
     this.active = false;
     this.core = options.core;
@@ -44,12 +61,15 @@ class Communication {
     this.subscribeOnly = options.hasOwnProperty('subscribeOnly') ? subscribeOnly : false;
     this.screenProperties = Object.assign({}, defaultCallProperties, { videoSource: 'window' }, screenProperties);
   }
-    /**
-     * Trigger an event through the API layer
-     * @param {String} event - The name of the event
-     * @param {*} [data]
-     */
-  triggerEvent = (event, data) => this.core.triggerEvent(event, data);
+
+  /**
+   * Trigger an event through the API layer
+   * @param {String} event - The name of the event
+   * @param {*} [data]
+   */
+  triggerEvent(event, data) {
+    this.core.triggerEvent(event, data);
+  }
 
   /**
    * Determine whether or not the party is able to join the call based on
@@ -236,7 +256,7 @@ class Communication {
     const { analytics, state, subscribe, ableToJoin, triggerEvent, autoSubscribe, publish } = this;
     return new Promise((resolve, reject) => { // eslint-disable-line consistent-return
       analytics.log(logAction.startCall, logVariation.attempt);
-      
+
       this.active = true;
       const initialStreamIds = Object.keys(state.getStreams());
 
@@ -332,5 +352,3 @@ class Communication {
   }
 
 }
-
-export default Communication;

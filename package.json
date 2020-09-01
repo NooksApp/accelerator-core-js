@@ -5,13 +5,14 @@
   "repository": "https://github.com/opentok/accelerator-core-js",
   "main": "dist/core.js",
   "scripts": {
-    "build:node": "babel -d ./dist/ ./src/",
-    "build:browser-polyfill": "(echo \"require('babel-polyfill');\\n\"; cat src/core.js) > src/browser-temp.js",
-    "build:browser-browserify": "mkdir browser && browserify src/browser-temp.js -o browser/opentok-acc-core.js -t [ babelify --presets [ es2015 ] --plugins [ transform-class-properties ] ] --im",
-    "build:browser": "npm run build:browser-polyfill && npm run build:browser-browserify && rm src/browser-temp.js",
-    "build:logversion": "replace '(js-vsol-)(x.y.z)' '$1'$npm_package_version ./dist ./browser",
-    "build": "npm run build:node && npm run build:browser && npm run build:logversion",
-    "test": "karma start"
+    "old:build:node": "babel -d ./dist/ ./src/",
+    "old:build:browser-polyfill": "(echo \"require('babel-polyfill');\\n\"; cat src/core.js) > src/browser-temp.js",
+    "old:build:browser-browserify": "mkdir browser && browserify src/browser-temp.js -o browser/opentok-acc-core.js -t [ babelify --presets [ es2015 ] --plugins [ transform-class-properties ] ] --im",
+    "old:build:browser": "npm run build:browser-polyfill && npm run build:browser-browserify && rm src/browser-temp.js",
+    "old:build:logversion": "replace '(js-vsol-)(x.y.z)' '$1'$npm_package_version ./dist ./browser",
+    "old:build": "npm run build:node && npm run build:browser && npm run build:logversion",
+    "old:test": "karma start",
+    "build": "tsc"
   },
   "keywords": [
     "opentok",
@@ -55,7 +56,8 @@
     "opentok-archiving": "^1.0.19",
     "opentok-screen-sharing": "^1.0.27",
     "opentok-text-chat": "^1.0.30",
-    "replace": "^0.3.0"
+    "replace": "^0.3.0",
+    "typescript": "^4.0.2"
   },
   "dependencies": {
     "opentok-solutions-logging": "^1.1.0"

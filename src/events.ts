@@ -1,4 +1,4 @@
-const events = {
+export const events = {
   session: [
     'archiveStarted',
     'archiveStopped',
@@ -58,5 +58,3 @@ const events = {
     'archiveError',
   ],
 };
-
-module.exports = events;

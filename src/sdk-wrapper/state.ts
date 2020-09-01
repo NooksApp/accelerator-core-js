@@ -12,8 +12,9 @@ export default class State {
   protected subscribers: StreamCollection<OT.Subscriber>;
   protected streams: Record<string, OT.Stream>;
   protected streamMap: Record<string, string>;
-  public connected: boolean;
-  public session: OT.Session;
+  private connected: boolean;
+  private session: OT.Session;
+  private options: any;
 
   constructor(public credentials: Credentials) {
     this.validateCredentials(credentials);
@@ -101,11 +102,26 @@ export default class State {
       subscriber);
   }
 
-  addStream(stream: OT.Stream) {
+  /**
+   * Removes all subscribers
+   */
+  removeAllSubscribers(): void {
+    this.subscribers.reset();
+  }
+
+  /**
+   * Add a stream to state
+   * @param stream An OpenTok stream object
+   */
+  addStream(stream: OT.Stream): void {
     this.streams[stream.streamId] = stream;
   }
 
-  removeStream(stream: OT.Stream) {
+  /**
+   * Remove a stream from state and any associated subscribers
+   * @param stream An OpenTok stream object
+   */
+  removeStream(stream: OT.Stream): void {
     const type = stream.videoType;
     const subscriberId = this.streamMap[stream.streamId];
     delete this.streamMap[stream.streamId];
@@ -116,8 +132,60 @@ export default class State {
   /**
    * Retrieves all streams
    */
-  getStreams() {
+  getStreams(): Record<string, OT.Stream> {
     return this.streams;
+  }
+
+  /**
+   * Retrieves the session
+   */
+  getSession() {
+    return this.session;
+  }
+
+  /**
+   * Set the current OpenTok session
+   * @param session The OpenTok session
+   */
+  setSession(session: OT.Session) {
+    this.session = session;
+  }
+
+  /**
+   * Get the map of stream ids to publisher/subscriber ids
+   */
+  getStreamMap() {
+    return this.streamMap;
+  }
+
+  /**
+   * Get the current OpenTok credentials
+   */
+  getCredentials() {
+    return this.credentials;
+  }
+
+  /**
+   * Set the current OpenTok credentials
+   * @param credentials Credentials to use
+   */
+  setCredentials(credentials: Credentials) {
+    this.credentials = credentials;
+  }
+
+  /**
+   * Get the options defined
+   */
+  getOptions() {
+    return this.options;
+  }
+
+  /**
+   * Set the options defined for core
+   * @param options Options to use for the session
+   */
+  setOptions = (options: any) => {
+    this.options = options;
   }
 
   /**

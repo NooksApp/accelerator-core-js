@@ -4,7 +4,7 @@
  *  document.getElementsByClassName
  *  'element' checks for a string before returning an element with `query`
  */
-const dom = {
+export const dom = {
   query(arg) {
     return document.querySelector(arg);
   },
@@ -20,11 +20,11 @@ const dom = {
 };
 
 /**
- * Returns a (nested) propery from an object, or undefined if it doesn't exist
+ * Returns a (nested) property from an object, or undefined if it doesn't exist
  * @param {String | Array} props - An array of properties or a single property
  * @param {Object | Array} obj
  */
-const path = (props, obj) => {
+export const path = (props, obj) => {
   let nested = obj;
   const properties = typeof props === 'string' ? props.split('.') : props;
 
@@ -38,13 +38,13 @@ const path = (props, obj) => {
 };
 
 /**
- * Checks for a (nested) propery in an object and returns the property if
+ * Checks for a (nested) property in an object and returns the property if
  * it exists.  Otherwise, it returns a default value.
  * @param {*} d - Default value
  * @param {String | Array} props - An array of properties or a single property
  * @param {Object | Array} obj
  */
-const pathOr = (d, props, obj) => {
+export const pathOr = (d, props, obj) => {
   const value = path(props, obj);
   return value === undefined ? d : value;
 };
@@ -54,11 +54,4 @@ const pathOr = (d, props, obj) => {
  * @param {String} text
  * @returns {String}
  */
-const properCase = text => `${text[0].toUpperCase()}${text.slice(1)}`;
-
-module.exports = {
-  dom,
-  path,
-  pathOr,
-  properCase,
-};
+export const properCase = text => `${text[0].toUpperCase()}${text.slice(1)}`;

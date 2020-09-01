@@ -10,6 +10,7 @@ export class StreamCollection<T extends IStream> {
 
   public camera: Record<string, T> = {};
   public screen: Record<string, T> = {};
+  public sip: Record<string, T> = {};
 
   /**
    * Returns the number of camera, screen and total streams
@@ -17,7 +18,8 @@ export class StreamCollection<T extends IStream> {
   getCount(): StreamCollectionSummary {
     return new StreamCollectionSummary(
       Object.keys(this.camera).length,
-      Object.keys(this.screen).length
+      Object.keys(this.screen).length,
+      Object.keys(this.sip).length
     );
   }
 
@@ -45,5 +47,6 @@ export class StreamCollection<T extends IStream> {
   reset() {
     this.camera = {};
     this.screen = {};
+    this.sip = {};
   }
 }
