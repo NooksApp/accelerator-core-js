@@ -3,9 +3,6 @@
     "target": "ES2015",
     "module": "commonjs",
     "outDir": "./dist",
-    "rootDirs": [
-      "./src"
-    ],
     "esModuleInterop": true
   }
 }

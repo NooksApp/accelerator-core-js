@@ -41,11 +41,11 @@ export class Analytics {
    * @param applicationName Name of the OpenTok application
    */
   constructor(
-    source: string,
-    sessionId: string,
-    connectionId: string,
-    apikey: string,
-    applicationName: string = 'coreAccelerator'
+    source: String,
+    sessionId: String,
+    connectionId: String,
+    apikey: String,
+    applicationName: String = 'coreAccelerator'
   ) {
     const otkanalyticsData = {
       clientVersion: 'js-vsol-x.y.z', // x.y.z filled by npm build script

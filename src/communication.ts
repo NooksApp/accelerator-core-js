@@ -1,21 +1,13 @@
 import CoreError from './errors';
 import {
-  AnalyticsOptions,
-  AnnotationOptions,
-  ArchivingOptions,
-  CommunicationOptions
-  CoreOptions,
-  Options,
-  ScreenSharingOptions,
-  StateOptions,
-  TextChatOptions
+  PackageCommunicationOptions
 } from './models';
 
 import { dom, path, pathOr, properCase } from './util';
 import { message, LogAction, LogVariation } from './logging';
 
 /**
- * Default UI propties
+ * Default UI properties
  * https://tokbox.com/developer/guides/customize-ui/js/
  */
 const defaultCallProperties = {
@@ -30,18 +22,28 @@ const defaultCallProperties = {
 export default class Communication {
 
   active: boolean;
+  connectionLimit: number;
+  autoSubscribe: boolean;
+  subscribeOnly: boolean;
+  screenProperties: any;
+  streamContainers: Function;
+  callProperties: any;
+
   core: CoreOptions;
   analytics: AnalyticsOptions;
   state: StateOptions;
 
-
-  constructor(options: Options) {
+  constructor(options: PackageCommunicationOptions) {
     this.validateOptions(options);
     this.setSession();
     this.createEventListeners();
   }
 
-  validateOptions(options: Options) {
+  /**
+   * 
+   * @param options 
+   */
+  validateOptions(options: PackageCommunicationOptions) {
     const requiredOptions = ['core', 'state', 'analytics'];
     requiredOptions.forEach((option) => {
       if (!options[option]) {
@@ -57,33 +59,39 @@ export default class Communication {
     this.streamContainers = options.streamContainers;
     this.callProperties = Object.assign({}, defaultCallProperties, callProperties);
     this.connectionLimit = options.connectionLimit || null;
-    this.autoSubscribe = options.hasOwnProperty('autoSubscribe') ? autoSubscribe : true;
-    this.subscribeOnly = options.hasOwnProperty('subscribeOnly') ? subscribeOnly : false;
+    this.autoSubscribe = options.autoSubscribe ? autoSubscribe : true;
+    this.subscribeOnly = options.subscribeOnly ? subscribeOnly : false;
     this.screenProperties = Object.assign({}, defaultCallProperties, { videoSource: 'window' }, screenProperties);
   }
 
   /**
    * Trigger an event through the API layer
-   * @param {String} event - The name of the event
-   * @param {*} [data]
+   * @param event The name of the event
+   * @param data Data to send via the trigger
    */
-  triggerEvent(event, data) {
+  triggerEvent(event: String, data: [any]) {
     this.core.triggerEvent(event, data);
   }
+
+
+  // ****************************************************************************
+  // THIS IS WHERE YOU ARE MICHAEL!!!
+  // YOU ARE LOOKING AT this.state.getStreams() below.
+  // ****************************************************************************
+
+
 
   /**
    * Determine whether or not the party is able to join the call based on
    * the specified connection limit, if any.
-   * @return {Boolean}
    */
-  ableToJoin = () => {
-    const { connectionLimit, state } = this;
-    if (!connectionLimit) {
+  ableToJoin = (): Boolean => {
+    if (!this.connectionLimit) {
       return true;
     }
     // Not using the session here since we're concerned with number of active publishers
-    const connections = Object.values(state.getStreams()).filter(s => s.videoType === 'camera');
-    return connections.length < connectionLimit;
+    const connections = Object.values(this.state.getStreams()).filter(s => s.videoType === 'camera');
+    return connections.length < this.connectionLimit;
   };
 
   /**
@@ -125,9 +133,9 @@ export default class Communication {
       const onPublish = publisher => (error) => {
         if (error) {
           reject(error);
-          analytics.log(logAction.startCall, logVariation.fail);
+          analytics.log(LogAction.StartCall, LogVariation.Fail);
         } else {
-          analytics.log(logAction.startCall, logVariation.success);
+          analytics.log(LogAction.StartCall, LogVariation.Success);
           state.addPublisher('camera', publisher);
           resolve(publisher);
         }
@@ -136,7 +144,7 @@ export default class Communication {
       const publishToSession = publisher => session.publish(publisher, onPublish(publisher));
 
       const handleError = (error) => {
-        analytics.log(logAction.startCall, logVariation.fail);
+        analytics.log(LogAction.StartCall, LogVariation.Fail);
         const errorMessage = error.code === 1010 ? 'Check your network connection' : error.message;
         triggerEvent('error', errorMessage);
         reject(error);
@@ -159,7 +167,7 @@ export default class Communication {
     const { analytics, state, streamContainers, session, triggerEvent, callProperties, screenProperties } = this;
     return new Promise((resolve, reject) => {
       let connectionData;
-      analytics.log(logAction.subscribe, logVariation.attempt);
+      analytics.log(LogAction.Subscribe, LogVariation.Attempt);
       const streamMap = state.getStreamMap();
       const { streamId } = stream;
       // No videoType indicates SIP https://tokbox.com/developer/guides/sip/
@@ -182,13 +190,13 @@ export default class Communication {
         );
         const subscriber = session.subscribe(stream, container, options, (error) => {
           if (error) {
-            analytics.log(logAction.subscribe, logVariation.fail);
+            analytics.log(LogAction.Subscribe, LogVariation.Fail);
             reject(error);
           } else {
             state.addSubscriber(subscriber);
             triggerEvent(`subscribeTo${properCase(type)}`, Object.assign({}, { subscriber }, state.all()));
             type === 'screen' && triggerEvent('startViewingSharedScreen', subscriber); // Legacy event
-            analytics.log(logAction.subscribe, logVariation.success);
+            analytics.log(LogAction.Subscribe, LogVariation.Success);
             resolve(subscriber);
           }
         });
@@ -204,11 +212,11 @@ export default class Communication {
   unsubscribe = (subscriber) => {
     const { analytics, session, state } = this;
     return new Promise((resolve) => {
-      analytics.log(logAction.unsubscribe, logVariation.attempt);
+      analytics.log(LogAction.Unsubscribe, LogVariation.Attempt);
       const type = pathOr('sip', 'stream.videoType', subscriber);
       state.removeSubscriber(type, subscriber);
       session.unsubscribe(subscriber);
-      analytics.log(logAction.unsubscribe, logVariation.success);
+      analytics.log(LogAction.Unsubscribe, LogVariation.Success);
       resolve();
     });
   }
@@ -255,7 +263,7 @@ export default class Communication {
   startCall = (publisherProperties) => {
     const { analytics, state, subscribe, ableToJoin, triggerEvent, autoSubscribe, publish } = this;
     return new Promise((resolve, reject) => { // eslint-disable-line consistent-return
-      analytics.log(logAction.startCall, logVariation.attempt);
+      analytics.log(LogAction.StartCall, LogVariation.Attempt);
 
       this.active = true;
       const initialStreamIds = Object.keys(state.getStreams());
@@ -266,7 +274,7 @@ export default class Communication {
       if (!ableToJoin()) {
         const errorMessage = 'Session has reached its connection limit';
         triggerEvent('error', errorMessage);
-        analytics.log(logAction.startCall, logVariation.fail);
+        analytics.log(LogAction.StartCall, LogVariation.Fail);
         return reject(new CoreError(errorMessage, 'connectionLimit'));
       }
 
@@ -313,18 +321,18 @@ export default class Communication {
    */
   endCall = () => {
     const { analytics, state, session, unsubscribe, triggerEvent } = this;
-    analytics.log(logAction.endCall, logVariation.attempt);
+    analytics.log(LogAction.EndCall, LogVariation.Attempt);
     const { publishers, subscribers } = state.getPubSub();
     const unpublish = publisher => session.unpublish(publisher);
     Object.values(publishers.camera).forEach(unpublish);
     Object.values(publishers.screen).forEach(unpublish);
-    // TODO Promise.all for unsubsribing
+    // TODO Promise.all for unsubscribing
     Object.values(subscribers.camera).forEach(unsubscribe);
     Object.values(subscribers.screen).forEach(unsubscribe);
     state.removeAllPublishers();
     this.active = false;
     triggerEvent('endCall');
-    analytics.log(logAction.endCall, logVariation.success);
+    analytics.log(LogAction.EndCall, LogVariation.Success);
   }
 
   /**

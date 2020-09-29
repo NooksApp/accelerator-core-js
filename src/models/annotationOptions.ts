@@ -1,7 +1,7 @@
 export class AnnotationOptions {
   constructor(
-    public item: any,
-    public color: any,
+    public items: any,
+    public colors: any,
     public onScreenCapture: Function,
     public absoluteParent: ParentOptions
   ) { }

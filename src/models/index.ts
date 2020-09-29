@@ -4,6 +4,7 @@ export * from './archivingOptions';
 export * from './communicationOptions';
 export * from './coreOptions';
 export * from './options';
+export * from './packages';
 export * from './screenSharingOptions';
 export * from './stateOptions';
 export * from './textChatOptions';

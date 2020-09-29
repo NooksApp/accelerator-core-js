@@ -1,6 +1,6 @@
 export class TextChatOptions {
   constructor(
-    public _name: string,
+    public name: string,
     public waitingMessage: string,
     public container: string,
     public alwaysOpen: boolean

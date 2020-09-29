@@ -5,11 +5,14 @@ import {
   Credentials, StreamType
 } from "./models";
 
-export class OpenTokSDK extends State {
+export default class OpenTokSDK extends State {
 
-  constructor(credentials: Credentials) {
+  constructor(credentials: Credentials, sessionOptions?: any) {
     super(credentials);
-    this.session = OT.initSession(credentials.apiKey, credentials.sessionId);
+    const session = OT.initSession(credentials.apiKey, credentials.sessionId, sessionOptions);
+    if (session) {
+      this.setSession(session);
+    }
   }
 
   /**
@@ -17,23 +20,25 @@ export class OpenTokSDK extends State {
    * @param connection - An OpenTok connection object
    */
   isMe(connection: OT.Connection): boolean {
-    return this.session &&
-      this.session.connection.connectionId === connection.connectionId;
+    const session = this.getSession();
+    return session &&
+      session.connection.connectionId === connection.connectionId;
   }
 
   /**
    * Wrap OpenTok session events
    */
   setInternalListeners() {
-    if (this.session) {
+    const session = this.getSession();
+    if (session) {
       /**
        * Wrap session events and update state when streams are created
        * or destroyed
        */
-      this.session.on('streamCreated', ({ stream }) => this.addStream(stream));
-      this.session.on('streamDestroyed', ({ stream }) => this.removeStream(stream));
-      this.session.on('sessionConnected sessionReconnected', () => this.connected = true);
-      this.session.on('sessionDisconnected', () => this.connected = false);
+      session.on('streamCreated', ({ stream }) => this.addStream(stream));
+      session.on('streamDestroyed', ({ stream }) => this.removeStream(stream));
+      session.on('sessionConnected sessionReconnected', () => this.setConnected(true));
+      session.on('sessionDisconnected', () => this.setConnected(false));
     }
   }
 
@@ -45,11 +50,14 @@ export class OpenTokSDK extends State {
    * @param callback
    * https://tokbox.com/developer/sdks/js/reference/Session.html#on
    */
-  on(events: string | object, callback?: Function) {
-    if (typeof events === 'object') {
-      bindListeners(this.session, this, events);
-    } else if (callback) {
-      bindListener(this.session, this, events, callback);
+  public on(events: string | object, callback?: Function) {
+    const session = this.getSession();
+    if (session) {
+      if (typeof events === 'object') {
+        bindListeners(session, this, events);
+      } else if (callback) {
+        bindListener(session, this, events, callback);
+      }
     }
   }
 
@@ -60,7 +68,10 @@ export class OpenTokSDK extends State {
    * https://tokbox.com/developer/sdks/js/reference/Session.html#off
    */
   off(...events: string[]) {
-    this.session.off(...events)
+    const session = this.getSession();
+    if (session) {
+      session.off(...events)
+    }
   }
 
   /**
@@ -129,11 +140,16 @@ export class OpenTokSDK extends State {
    */
   async publishPreview(publisher: OT.Publisher): Promise<OT.Publisher> {
     return await (new Promise((resolve, reject) => {
-      this.session.publish(publisher, (error) => {
-        error && reject(error);
-        this.addPublisher(publisher.stream.videoType as StreamType, publisher);
-        resolve(publisher);
-      });
+      const session = this.getSession();
+      if (session) {
+        session.publish(publisher, (error) => {
+          error && reject(error);
+          this.addPublisher(publisher.stream.videoType as StreamType, publisher);
+          resolve(publisher);
+        });
+      } else {
+        reject('Unable to publish without an active connection to a session');
+      }
     }));
   }
 
@@ -141,33 +157,41 @@ export class OpenTokSDK extends State {
    * Stop publishing a stream
    * @param publisher An OpenTok publisher object
    */
-  unpublish(publisher) {
+  unpublish(publisher: OT.Publisher) {
     const type = publisher.stream.videoType;
-    this.session.unpublish(publisher);
+    const session = this.getSession();
+    if (session) {
+      session.unpublish(publisher);
+    }
     this.removePublisher(type, publisher);
   }
 
   /**
    * Subscribe to stream
-   * @param stream
+   * @param stream OpenTok stream to subscribe to
    * @param container The id of the container or a reference to the element
-   * @param properties 
+   * @param properties Settings to use in the subscription of the stream
    * @param eventListeners An object eventName/callback key/value pairs
    * https://tokbox.com/developer/sdks/js/reference/Session.html#subscribe
    */
   async subscribe(stream: OT.Stream, container: string | HTMLElement, properties: OT.SubscriberProperties, eventListeners: Object = null): Promise<OT.Subscriber> {
     return await (new Promise((resolve, reject) => {
-      const subscriber = this.session.subscribe(stream, container, properties, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          this.addSubscriber(subscriber);
-          if (eventListeners) {
-            bindListeners(subscriber, this, eventListeners);
+      const session = this.getSession();
+      if (session) {
+        const subscriber = session.subscribe(stream, container, properties, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            this.addSubscriber(subscriber);
+            if (eventListeners) {
+              bindListeners(subscriber, this, eventListeners);
+            }
+            resolve(subscriber);
           }
-          resolve(subscriber);
-        }
-      });
+        });
+      } else {
+        reject('Unable to subscribe to a stream when not connected to a session');
+      }
     }));
   }
 
@@ -177,7 +201,10 @@ export class OpenTokSDK extends State {
    */
   async unsubscribe(subscriber: OT.Subscriber): Promise<void> {
     return await (new Promise((resolve) => {
-      this.session.unsubscribe(subscriber);
+      const session = this.getSession();
+      if (session) {
+        session.unsubscribe(subscriber);
+      }
       this.removeSubscriber(subscriber);
       resolve();
     }));
@@ -195,9 +222,12 @@ export class OpenTokSDK extends State {
     }
     return await (new Promise((resolve, reject) => {
       const { token } = this.credentials;
-      this.session.connect(token, (error) => {
-        error ? reject(error) : resolve();
-      });
+      const session = this.getSession();
+      if (session) {
+        session.connect(token, (error) => {
+          error ? reject(error) : resolve();
+        });
+      }
     }));
   }
 
@@ -207,9 +237,12 @@ export class OpenTokSDK extends State {
    */
   async forceDisconnect(connection: OT.Connection): Promise<void> {
     return await (new Promise((resolve, reject) => {
-      this.session.forceDisconnect(connection, (error) => {
-        error ? reject(error) : resolve();
-      });
+      const session = this.getSession();
+      if (session) {
+        session.forceDisconnect(connection, (error) => {
+          error ? reject(error) : resolve();
+        });
+      }
     }));
   }
 
@@ -219,9 +252,12 @@ export class OpenTokSDK extends State {
    */
   async forceUnpublish(stream: OT.Stream): Promise<void> {
     return await (new Promise((resolve, reject) => {
-      this.session.forceUnpublish(stream, (error) => {
-        error ? reject(error) : resolve();
-      });
+      const session = this.getSession();
+      if (session) {
+        session.forceUnpublish(stream, (error) => {
+          error ? reject(error) : resolve();
+        });
+      }
     }));
   }
 
@@ -236,9 +272,12 @@ export class OpenTokSDK extends State {
     const data = JSON.stringify(signalData);
     const signal = to ? { type, data, to } : { type, data };
     return await (new Promise((resolve, reject) => {
-      this.session.signal(signal, (error) => {
-        error ? reject(error) : resolve();
-      });
+      const session = this.getSession();
+      if (session) {
+        session.signal(signal, (error) => {
+          error ? reject(error) : resolve();
+        });
+      }
     }));
   }
 
@@ -246,7 +285,10 @@ export class OpenTokSDK extends State {
    * Disconnect from the OpenTok session
    */
   disconnect() {
-    this.session.disconnect();
+    const session = this.getSession();
+    if (session) {
+      session.disconnect();
+    }
     this.reset();
   }
 
@@ -283,7 +325,7 @@ if (global === window) {
  * @param event - The name of the event
  * @param callback
  */
-const bindListener = (target, context, event, callback) => {
+const bindListener = (target: any, context: unknown, event: string, callback: Function) => {
   const paramsError = '\'on\' requires a string and a function to create an event listener.';
   if (typeof event !== 'string' || typeof callback !== 'function') {
     throw new SDKError(paramsError, 'invalidParameters');
@@ -298,7 +340,7 @@ const bindListener = (target, context, event, callback) => {
  * @param {Object | Array} listeners - An object (or array of objects) with
  *        eventName/callback k/v pairs
  */
-const bindListeners = (target, context, listeners) => {
+const bindListeners = (target: any, context: unknown, listeners: Object | [Object]) => {
   /**
    * Create listeners from an object with event/callback k/v pairs
    * @param {Object} listeners

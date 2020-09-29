@@ -1,4 +1,5 @@
 import OT from '@opentok/client';
+import { Options } from '../models';
 import SDKError from './errors';
 import {
   Credentials,
@@ -9,12 +10,12 @@ import {
 export default class State {
 
   protected publishers: StreamCollection<OT.Publisher>;
-  protected subscribers: StreamCollection<OT.Subscriber>;
-  protected streams: Record<string, OT.Stream>;
   protected streamMap: Record<string, string>;
+  protected streams: Record<string, OT.Stream>;
+  protected subscribers: StreamCollection<OT.Subscriber>;
   private connected: boolean;
-  private session: OT.Session;
   private options: any;
+  private session: OT.Session;
 
   constructor(public credentials: Credentials) {
     this.validateCredentials(credentials);
@@ -152,6 +153,21 @@ export default class State {
   }
 
   /**
+   * Retrieves the whether we are connected or not
+   */
+  getConnected() {
+    return this.connected;
+  }
+
+  /**
+   * Set the connection state
+   * @param isConnected Whether we are connected to the session or not
+   */
+  setConnected(isConnected: boolean) {
+    this.connected = isConnected;
+  }
+
+  /**
    * Get the map of stream ids to publisher/subscriber ids
    */
   getStreamMap() {
@@ -176,7 +192,7 @@ export default class State {
   /**
    * Get the options defined
    */
-  getOptions() {
+  getOptions(): Options {
     return this.options;
   }
 
@@ -184,7 +200,7 @@ export default class State {
    * Set the options defined for core
    * @param options Options to use for the session
    */
-  setOptions = (options: any) => {
+  setOptions = (options: Options) => {
     this.options = options;
   }
 

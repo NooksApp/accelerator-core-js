@@ -1,99 +1,64 @@
-/* global OT */
-/**
- * Dependencies
- */
-const util = require('./util');
-const State = require('./state').default;
-const accPackEvents = require('./events');
-const Communication = require('./communication').default;
-const OpenTokSDK = require('./sdk-wrapper/sdkWrapper');
-const { CoreError } = require('./errors');
-const {
-  message,
-  Analytics,
-  logAction,
-  logVariation,
-} = require('./logging');
-
-
-/**
- * Helper methods
- */
-const { dom, path, pathOr, properCase } = util;
-
-/**
- * Ensure that we have the required credentials
- * @param {Object} credentials
- * @param {String} credentials.apiKey
- * @param {String} credentials.sessionId
- * @param {String} credentials.token
- */
-const validateCredentials = (credentials = []) => {
-  const required = ['apiKey', 'sessionId', 'token'];
-  required.forEach((credential) => {
-    if (!credentials[credential]) {
-      throw new CoreError(`${credential} is a required credential`, 'invalidParameters');
-    }
-  });
-};
+import { AnnotationOptions, Options, Packages } from './models';
+import { dom, path, pathOr, properCase } from './util'
+import { message, Analytics, LogAction, LogVariation } from './logging';
+import { events } from './events';
+import Communication from './communication';
+import OpenTokSDK from './sdk-wrapper/sdkWrapper';
+import CoreError from './errors';
+import { Credentials, StreamType } from './sdk-wrapper/models';
 
 class AccCore {
-  constructor(options) {
+
+  // OpenTok SDK Wrapper
+  private OpenTokSDK: OpenTokSDK;
+  private analytics: Analytics;
+  private annotation: Annotation;
+  private archiving: Archiving;
+  private communication: Communication;
+  private screenSharing: ScreenSharing;
+  private textChat: TextChat;
+
+  private eventListeners: Object = {};
+
+  constructor(options: Options) {
+
     // Options/credentials validation
     if (!options) {
       throw new CoreError('Missing options required for initialization', 'invalidParameters');
     }
-    const { credentials } = options;
-    validateCredentials(options.credentials);
-    this.name = options.name;
+
+    const sessionProps = options.largeScale ? { connectionEventsSuppressed: true } : undefined;
+    this.OpenTokSDK = new OpenTokSDK(options.credentials, sessionProps);
+    this.OpenTokSDK.setOptions(options);
+
+    const credentials = options.credentials;
 
     // Init analytics
-    this.applicationName = options.applicationName;
-    this.analytics = new Analytics(window.location.origin, credentials.sessionId, null, credentials.apiKey);
-    this.analytics.log(logAction.init, logVariation.attempt);
-
-    // Create session, setup state
-    const sessionProps = options.largeScale ? { connectionEventsSuppressed: true } : undefined;
-    this.session = OT.initSession(credentials.apiKey, credentials.sessionId, sessionProps);
-    this.internalState = new State();
-    this.internalState.setSession(this.session);
-    this.internalState.setCredentials(credentials);
-    this.internalState.setOptions(options);
-
-    // Individual accelerator packs
-    this.communication = null;
-    this.textChat = null;
-    this.screenSharing = null;
-    this.annotation = null;
-    this.archiving = null;
+    this.analytics = new Analytics(window.location.origin, credentials.sessionId, null, credentials.apiKey, options.applicationName);
+    this.analytics.log(LogAction.Init, LogVariation.Attempt);
 
     // Create internal event listeners
-    this.createEventListeners(this.session, options);
+    const session = this.OpenTokSDK.getSession();
+    this.createEventListeners(session, options);
 
-    this.analytics.log(logAction.init, logVariation.success);
+    this.analytics.log(LogAction.Init, LogVariation.Success);
   }
 
-  // OpenTok SDK Wrapper
-  static OpenTokSDK = OpenTokSDK;
-
-  // Expose utility methods
-  static util = util
 
   /**
    * Get access to an accelerator pack
-   * @param {String} packageName - textChat, screenSharing, annotation, or archiving
-   * @returns {Object} The instance of the accelerator pack
+   * @param packageName textChat, screenSharing, annotation, or archiving
+   * @returns The instance of the accelerator pack
    */
-  getAccPack = (packageName) => {
-    const { analytics, textChat, screenSharing, annotation, archiving } = this;
-    analytics.log(logAction.getAccPack, logVariation.attempt);
+  getAccPack = (packageName: string): Object => {
+    this.analytics.log(LogAction.GetAccPack, LogVariation.Attempt);
     const packages = {
-      textChat,
-      screenSharing,
-      annotation,
-      archiving,
+      textChat: this.textChat,
+      screenSharing: this.screenSharing,
+      annotation: this.annotation,
+      archiving: this.archiving,
     };
-    analytics.log(logAction.getAccPack, logVariation.success);
+    this.analytics.log(LogAction.GetAccPack, LogVariation.Success);
     return packages[packageName];
   }
 
@@ -101,10 +66,10 @@ class AccCore {
 
   /**
    * Register events that can be listened to be other components/modules
-   * @param {array | string} events - A list of event names. A single event may
+   * @param events A list of event names. A single event may
    * also be passed as a string.
    */
-  registerEvents = (events) => {
+  registerEvents = (events: [] | String) => {
     const { eventListeners } = this;
     const eventList = Array.isArray(events) ? events : [events];
     eventList.forEach((event) => {
@@ -118,12 +83,11 @@ class AccCore {
    * Register a callback for a specific event or pass an object with
    * with event => callback key/value pairs to register listeners for
    * multiple events.
-   * @param {String | Object} event - The name of the event
-   * @param {Function} callback
+   * @param event The name of the event
+   * @param callback
    */
-  on = (event, callback) => {
+  on = (event: String | Object, callback: Function) => {
     const { eventListeners, on } = this;
-    // analytics.log(logAction.on, logVariation.attempt);
     if (typeof event === 'object') {
       Object.keys(event).forEach((eventName) => {
         on(eventName, event[eventName]);
@@ -133,22 +97,20 @@ class AccCore {
     const eventCallbacks = eventListeners[event];
     if (!eventCallbacks) {
       message(`${event} is not a registered event.`);
-      // analytics.log(logAction.on, logVariation.fail);
     } else {
       eventCallbacks.add(callback);
-      // analytics.log(logAction.on, logVariation.success);
     }
   }
 
   /**
    * Remove a callback for a specific event.  If no parameters are passed,
    * all event listeners will be removed.
-   * @param {String} event - The name of the event
-   * @param {Function} callback
+   * @param event The name of the event
+   * @param callback
    */
-  off = (event, callback) => {
+  off = (event: String, callback: Function) => {
     const { eventListeners } = this;
-    // analytics.log(logAction.off, logVariation.attempt);
+    // analytics.log(LogAction.off, LogVariation.attempt);
     if (!event && !callback) {
       Object.keys(eventListeners).forEach((eventType) => {
         eventListeners[eventType].clear();
@@ -156,21 +118,21 @@ class AccCore {
     } else {
       const eventCallbacks = eventListeners[event];
       if (!eventCallbacks) {
-        // analytics.log(logAction.off, logVariation.fail);
+        // analytics.log(LogAction.off, LogVariation.fail);
         message(`${event} is not a registered event.`);
       } else {
         eventCallbacks.delete(callback);
-        // analytics.log(logAction.off, logVariation.success);
+        // analytics.log(LogAction.off, LogVariation.success);
       }
     }
   }
 
   /**
    * Trigger an event and fire all registered callbacks
-   * @param {String} event - The name of the event
-   * @param {*} data - Data to be passed to callback functions
+   * @param event The name of the event
+   * @param data Data to be passed to callback functions
    */
-  triggerEvent = (event, data) => {
+  triggerEvent = (event: string, data: any) => {
     const { eventListeners, registerEvents } = this;
     const eventCallbacks = eventListeners[event];
     if (!eventCallbacks) {
@@ -183,79 +145,75 @@ class AccCore {
 
   /**
    * Get the current OpenTok session object
-   * @returns {Object}
    */
-  getSession = () => this.internalState.getSession()
+  getSession = (): OT.Session => this.OpenTokSDK.getSession();
 
 
   /**
    * Returns the current OpenTok session credentials
-   * @returns {Object}
    */
-  getCredentials = () => this.internalState.getCredentials()
+  getCredentials = (): Credentials => this.OpenTokSDK.getCredentials();
 
   /**
    * Returns the options used for initialization
-   * @returns {Object}
    */
-  getOptions = () => this.internalState.getOptions()
+  getOptions = (): any => this.OpenTokSDK.getOptions()
 
-  createEventListeners = (session, options) => {
+  createEventListeners = (session: OT.Session, options: Options) => {
     this.eventListeners = {};
-    const { registerEvents, internalState, triggerEvent, on, getSession } = this;
-    Object.keys(accPackEvents).forEach(type => registerEvents(accPackEvents[type]));
+    Object.keys(events).forEach(type => this.registerEvents(events[type]));
 
     /**
      * If using screen sharing + annotation in an external window, the screen sharing
      * package will take care of calling annotation.start() and annotation.linkCanvas()
      */
-    const usingAnnotation = path('screenSharing.annotation', options);
-    const internalAnnotation = usingAnnotation && !path('screenSharing.externalWindow', options);
+    const usingAnnotation = options.screenSharing && options.screenSharing.annotation;
+    const internalAnnotation = usingAnnotation && !options.screenSharing.externalWindow;
 
     /**
-     * Wrap session events and update internalState when streams are created
+     * Wrap session events and update this.OpenTokSDK when streams are created
      * or destroyed
      */
-    accPackEvents.session.forEach((eventName) => {
-      session.on(eventName, (event) => {
-        if (eventName === 'streamCreated') { internalState.addStream(event.stream); }
-        if (eventName === 'streamDestroyed') { internalState.removeStream(event.stream); }
-        triggerEvent(eventName, event);
+    events.session.forEach((eventName) => {
+      session.on(eventName, (event: OT.Event<string, any>) => {
+        if (eventName === 'streamCreated') { this.OpenTokSDK.addStream(event.stream); }
+        if (eventName === 'streamDestroyed') { this.OpenTokSDK.removeStream(event.stream); }
+        this.triggerEvent(eventName, event);
       });
     });
 
     if (usingAnnotation) {
-      on('subscribeToScreen', ({ subscriber }) => {
-        this.annotation.start(getSession())
+      this.on('subscribeToScreen', ({ subscriber }) => {
+        this.annotation.start(this.getSession())
           .then(() => {
-            const absoluteParent = dom.query(path('annotation.absoluteParent.subscriber', options));
+            const absoluteParent = dom.query(options.annotation.absoluteParent.subscriber);
             const linkOptions = absoluteParent ? { absoluteParent } : null;
             this.annotation.linkCanvas(subscriber, subscriber.element.parentElement, linkOptions);
           });
       });
 
-      on('unsubscribeFromScreen', () => {
+      this.on('unsubscribeFromScreen', () => {
         this.annotation.end();
       });
     }
 
-    on('startScreenSharing', (publisher) => {
-      internalState.addPublisher('screen', publisher);
-      triggerEvent('startScreenShare', Object.assign({}, { publisher }, internalState.getPubSub()));
+    this.on('startScreenSharing', (publisher) => {
+      this.OpenTokSDK.addPublisher(StreamType.Screen, publisher);
+      this.triggerEvent('startScreenShare', Object.assign({}, { publisher }, this.OpenTokSDK.getPubSub()));
       if (internalAnnotation) {
-        this.annotation.start(getSession())
+        this.annotation.start(this.getSession())
           .then(() => {
-            const absoluteParent = dom.query(path('annotation.absoluteParent.publisher', options));
+            const absoluteParent = dom.query(options.annotation.absoluteParent.publisher);
             const linkOptions = absoluteParent ? { absoluteParent } : null;
             this.annotation.linkCanvas(publisher, publisher.element.parentElement, linkOptions);
           });
       }
     });
 
-    on('endScreenSharing', (publisher) => {
+    this.on('endScreenSharing', (publisher) => {
       // delete publishers.screen[publisher.id];
-      internalState.removePublisher('screen', publisher);
-      triggerEvent('endScreenShare', internalState.getPubSub());
+      this.OpenTokSDK.removePublisher('screen', publisher);
+      this.triggerEvent('endScreenShare', this.OpenTokSDK.getPubSub());
       if (usingAnnotation) {
         this.annotation.end();
       }
@@ -265,38 +223,35 @@ class AccCore {
   setupExternalAnnotation = () => this.annotation.start(this.getSession(), { screensharing: true })
 
   linkAnnotation = (pubSub, annotationContainer, externalWindow) => {
-    const { annotation, internalState } = this;
-    annotation.linkCanvas(pubSub, annotationContainer, {
+    this.annotation.linkCanvas(pubSub, annotationContainer, {
       externalWindow,
     });
 
     if (externalWindow) {
       // Add subscribers to the external window
-      const streams = internalState.getStreams();
+      const streams = this.OpenTokSDK.getStreams();
       const cameraStreams = Object.keys(streams).reduce((acc, streamId) => {
         const stream = streams[streamId];
         return stream.videoType === 'camera' || stream.videoType === 'sip' ? acc.concat(stream) : acc;
       }, []);
-      cameraStreams.forEach(annotation.addSubscriberToExternalWindow);
+      cameraStreams.forEach(this.annotation.addSubscriberToExternalWindow);
     }
   }
 
   initPackages = () => {
-    const { analytics, getSession, getOptions, internalState } = this;
-    const { on, registerEvents, setupExternalAnnotation, triggerEvent, linkAnnotation } = this;
-    analytics.log(logAction.initPackages, logVariation.attempt);
-    const session = getSession();
-    const options = getOptions();
+    this.analytics.log(LogAction.InitPackages, LogVariation.Attempt);
+    const session = this.OpenTokSDK.getSession();
+    const options = this.OpenTokSDK.getOptions();
+
     /**
      * Try to require a package.  If 'require' is unavailable, look for
-     * the package in global scope.  A switch ttatement is used because
+     * the package in global scope.  A switch statement is used because
      * webpack and Browserify aren't able to resolve require statements
      * that use variable names.
-     * @param {String} packageName - The name of the npm package
-     * @param {String} globalName - The name of the package if exposed on global/window
-     * @returns {Object}
+     * @param packageName - The name of the npm package
+     * @param globalName - The name of the package if exposed on global/window
      */
-    const optionalRequire = (packageName, globalName) => {
+    const optionalRequire = (packageName: String, globalName: string): Object => {
       let result;
       /* eslint-disable global-require, import/no-extraneous-dependencies, import/no-unresolved */
       try {
@@ -321,33 +276,35 @@ class AccCore {
         result = window[globalName];
       }
       if (!result) {
-        analytics.log(logAction.initPackages, logVariation.fail);
+        this.analytics.log(LogAction.InitPackages, LogVariation.Fail);
         throw new CoreError(`Could not load ${packageName}`, 'missingDependency');
       }
       return result;
     };
 
-    const availablePackages = {
-      textChat() {
-        return optionalRequire('opentok-text-chat', 'TextChatAccPack');
-      },
-      screenSharing() {
-        return optionalRequire('opentok-screen-sharing', 'ScreenSharingAccPack');
-      },
-      annotation() {
-        return optionalRequire('opentok-annotation', 'AnnotationAccPack');
-      },
-      archiving() {
-        return optionalRequire('opentok-archiving', 'ArchivingAccPack');
-      },
-    };
+    const packages: Packages = {};
 
-    const packages = {};
-    (path('packages', options) || []).forEach((acceleratorPack) => {
-      if (availablePackages[acceleratorPack]) { // eslint-disable-next-line no-param-reassign
-        packages[properCase(acceleratorPack)] = availablePackages[acceleratorPack]();
-      } else {
+    (options.packages || []).forEach((acceleratorPack) => {
+      let package;
+      switch (acceleratorPack) {
+        case 'textChat':
+          package = optionalRequire('opentok-text-chat', 'TextChatAccPack');
+          break;
+        case 'screenSharing':
+          package = optionalRequire('opentok-screen-sharing', 'ScreenSharingAccPack');
+          break;
+        case 'annotation':
+          package = optionalRequire('opentok-annotation', 'AnnotationAccPack');
+          break;
+        case 'archiving':
+          package = optionalRequire('opentok-archiving', 'ArchivingAccPack');
+          break;
+      }
+
+      if (!package) {
         message(`${acceleratorPack} is not a valid accelerator pack`);
+      } else {
+        packages[properCase(acceleratorPack)] = package;
       }
     });
 
@@ -362,25 +319,22 @@ class AccCore {
       const stream = pathOr(getDefaultContainer, 'streamContainers', options);
       return { stream, controls, chat };
     };
-    /** *** *** *** *** */
-
 
     /**
      * Return options for the specified package
-     * @param {String} packageName
-     * @returns {Object}
+     * @param packageName
      */
-    const packageOptions = (packageName) => {
+    const packageOptions = (packageName: String): Object => {
       /**
        * Methods to expose to accelerator packs
        */
       const accPack = {
-        registerEventListener: on, // Legacy option
-        on,
-        registerEvents,
-        triggerEvent,
-        setupExternalAnnotation,
-        linkAnnotation,
+        registerEventListener: this.on, // Legacy option
+        on: this.on,
+        registerEvents: this.registerEvents,
+        triggerEvent: this.triggerEvent,
+        setupExternalAnnotation: this.setupExternalAnnotation,
+        linkAnnotation: this.linkAnnotation,
       };
 
       /**
@@ -403,14 +357,22 @@ class AccCore {
       switch (packageName) {
         /* beautify ignore:start */
         case 'communication': {
-          return Object.assign({}, baseOptions, { state: internalState, analytics }, options.communication);
+          return Object.assign({},
+            baseOptions,
+            {
+              state: this.OpenTokSDK,
+              analytics: this.analytics
+            },
+            {
+              communication: options.communication
+            });
         }
         case 'textChat': {
           const textChatOptions = {
-            textChatContainer: path('textChat.container', options),
-            waitingMessage: path('textChat.waitingMessage', options),
-            sender: { alias: path('textChat.name', options) },
-            alwaysOpen: path('textChat.alwaysOpen', options),
+            textChatContainer: options.textChat.container,
+            waitingMessage: options.textChat.waitingMessage,
+            sender: { alias: options.textChat.name },
+            alwaysOpen: options.textChat.alwaysOpen
           };
           return Object.assign({}, baseOptions, textChatOptions);
         }
@@ -439,67 +401,66 @@ class AccCore {
     this.annotation = packages.Annotation ? new packages.Annotation(packageOptions('annotation')) : null;
     this.archiving = packages.Archiving ? new packages.Archiving(packageOptions('archiving')) : null;
 
-    analytics.log(logAction.initPackages, logVariation.success);
+    this.analytics.log(LogAction.InitPackages, LogVariation.Success);
   }
 
   /**
    * Connect to the session
-   * @returns {Promise} <resolve: -, reject: Error>
    */
-  connect = () => {
-    const { analytics, getSession, initPackages, triggerEvent, getCredentials } = this;
+  connect = (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      analytics.log(logAction.connect, logVariation.attempt);
-      const session = getSession();
-      const { token } = getCredentials();
+      this.analytics.log(LogAction.Connect, LogVariation.Attempt);
+      const session = this.getSession();
+      const { apiKey, token } = this.getCredentials();
       session.connect(token, (error) => {
         if (error) {
           message(error);
-          analytics.log(logAction.connect, logVariation.fail);
+          this.analytics.log(LogAction.Connect, LogVariation.Fail);
           return reject(error);
         }
-        const { sessionId, apiKey } = session;
-        analytics.update(sessionId, path('connection.connectionId', session), apiKey);
-        analytics.log(logAction.connect, logVariation.success);
-        initPackages();
-        triggerEvent('connected', session);
-        return resolve({ connections: session.connections.length() });
+        const { sessionId } = session;
+        this.analytics.update(sessionId, session.connection.connectionId, apiKey);
+        this.analytics.log(LogAction.Connect, LogVariation.Success);
+        this.initPackages();
+        this.triggerEvent('connected', session);
+        return resolve();
       });
     });
   }
 
   /**
    * Disconnect from the session
-   * @returns {Promise} <resolve: -, reject: Error>
    */
-  disconnect = () => {
-    const { analytics, getSession, internalState } = this;
-    analytics.log(logAction.disconnect, logVariation.attempt);
-    getSession().disconnect();
-    internalState.reset();
-    analytics.log(logAction.disconnect, logVariation.success);
+  disconnect = (): void => {
+    this.analytics.log(LogAction.Disconnect, LogVariation.Attempt);
+    this.getSession().disconnect();
+    this.OpenTokSDK.reset();
+    this.analytics.log(LogAction.Disconnect, LogVariation.Success);
   };
 
   /**
    * Force a remote connection to leave the session
-   * @param {Object} connection
-   * @returns {Promise} <resolve: empty, reject: Error>
+   * @param connection
    */
-  forceDisconnect = (connection) => {
-    const { analytics, getSession } = this;
+  forceDisconnect = (connection: OT.Connection): Promise<void> => {
     return new Promise((resolve, reject) => {
-      analytics.log(logAction.forceDisconnect, logVariation.attempt);
-      getSession().forceDisconnect(connection, (error) => {
+      this.analytics.log(LogAction.ForceDisconnect, LogVariation.Attempt);
+      this.getSession().forceDisconnect(connection, (error) => {
         if (error) {
-          analytics.log(logAction.forceDisconnect, logVariation.fail);
+          this.analytics.log(LogAction.ForceDisconnect, LogVariation.Fail);
           reject(error);
         } else {
-          analytics.log(logAction.forceDisconnect, logVariation.success);
+          this.analytics.log(LogAction.ForceDisconnect, LogVariation.Success);
           resolve();
         }
       });
     });
   }
+
+  // *********************************************
+  // MIKE: HERE IS WHERE YOU ARE!!!!
+  // *********************************************
+
 
   /**
    * Start publishing video and subscribing to streams
@@ -518,7 +479,7 @@ class AccCore {
    * Start publishing video and subscribing to streams
    * @returns {Object} The internal state of the core session
    */
-  state = () => this.internalState.all();
+  state = () => this.this.OpenTokSDK.all();
 
   /**
    * Manually subscribe to a stream
@@ -545,13 +506,13 @@ class AccCore {
   forceUnpublish = (stream) => {
     const { analytics, getSession } = this;
     return new Promise((resolve, reject) => {
-      analytics.log(logAction.forceUnpublish, logVariation.attempt);
+      analytics.log(LogAction.forceUnpublish, LogVariation.attempt);
       getSession().forceUnpublish(stream, (error) => {
         if (error) {
-          analytics.log(logAction.forceUnpublish, logVariation.fail);
+          analytics.log(LogAction.forceUnpublish, LogVariation.fail);
           reject(error);
         } else {
-          analytics.log(logAction.forceUnpublish, logVariation.success);
+          analytics.log(LogAction.forceUnpublish, LogVariation.success);
           resolve();
         }
       });
@@ -583,7 +544,7 @@ class AccCore {
   signal = (type, data, to) => {
     const { analytics, getSession } = this;
     return new Promise((resolve, reject) => {
-      analytics.log(logAction.signal, logVariation.attempt);
+      analytics.log(LogAction.signal, LogVariation.attempt);
       const session = getSession();
       const signalObj = Object.assign({},
         type ? { type } : null,
@@ -592,10 +553,10 @@ class AccCore {
       );
       session.signal(signalObj, (error) => {
         if (error) {
-          analytics.log(logAction.signal, logVariation.fail);
+          analytics.log(LogAction.signal, LogVariation.fail);
           reject(error);
         } else {
-          analytics.log(logAction.signal, logVariation.success);
+          analytics.log(LogAction.signal, LogVariation.success);
           resolve();
         }
       });
@@ -607,12 +568,12 @@ class AccCore {
    * @param {Boolean} enable
    */
   toggleLocalAudio = (enable) => {
-    const { analytics, internalState, communication } = this;
-    analytics.log(logAction.toggleLocalAudio, logVariation.attempt);
-    const { publishers } = internalState.getPubSub();
+    const { analytics, this.OpenTokSDK, communication } = this;
+    analytics.log(LogAction.toggleLocalAudio, LogVariation.attempt);
+    const { publishers } = this.OpenTokSDK.getPubSub();
     const toggleAudio = id => communication.enableLocalAV(id, 'audio', enable);
     Object.keys(publishers.camera).forEach(toggleAudio);
-    analytics.log(logAction.toggleLocalAudio, logVariation.success);
+    analytics.log(LogAction.toggleLocalAudio, LogVariation.success);
   };
 
   /**
@@ -620,12 +581,12 @@ class AccCore {
    * @param {Boolean} enable
    */
   toggleLocalVideo = (enable) => {
-    const { analytics, internalState, communication } = this;
-    analytics.log(logAction.toggleLocalVideo, logVariation.attempt);
-    const { publishers } = internalState.getPubSub();
+    const { analytics, this.OpenTokSDK, communication } = this;
+    analytics.log(LogAction.toggleLocalVideo, LogVariation.attempt);
+    const { publishers } = this.OpenTokSDK.getPubSub();
     const toggleVideo = id => communication.enableLocalAV(id, 'video', enable);
     Object.keys(publishers.camera).forEach(toggleVideo);
-    analytics.log(logAction.toggleLocalVideo, logVariation.success);
+    analytics.log(LogAction.toggleLocalVideo, LogVariation.success);
   };
 
   /**
@@ -635,9 +596,9 @@ class AccCore {
    */
   toggleRemoteAudio = (id, enable) => {
     const { analytics, communication } = this;
-    analytics.log(logAction.toggleRemoteAudio, logVariation.attempt);
+    analytics.log(LogAction.toggleRemoteAudio, LogVariation.attempt);
     communication.enableRemoteAV(id, 'audio', enable);
-    analytics.log(logAction.toggleRemoteAudio, logVariation.success);
+    analytics.log(LogAction.toggleRemoteAudio, LogVariation.success);
   };
 
   /**
@@ -647,9 +608,9 @@ class AccCore {
    */
   toggleRemoteVideo = (id, enable) => {
     const { analytics, communication } = this;
-    analytics.log(logAction.toggleRemoteVideo, logVariation.attempt);
+    analytics.log(LogAction.toggleRemoteVideo, LogVariation.attempt);
     communication.enableRemoteAV(id, 'video', enable);
-    analytics.log(logAction.toggleRemoteVideo, logVariation.success);
+    analytics.log(LogAction.toggleRemoteVideo, LogVariation.success);
   }
 
 }
