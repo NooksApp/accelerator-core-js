@@ -1,8 +1,8 @@
 {
-  "name": "opentok-accelerator-core",
-  "version": "2.0.17",
+  "name": "opentok-accelerator-core-nooks",
+  "version": "2.0.18",
   "description": "Opentok Accelerator Core",
-  "repository": "https://github.com/opentok/accelerator-core-js",
+  "repository": "https://github.com/NooksApp/accelerator-core-js",
   "main": "dist/core.js",
   "scripts": {
     "build:node": "babel -d ./dist/ ./src/",
@@ -23,7 +23,7 @@
     "video",
     "audio"
   ],
-  "author": "adrice727@gmail.com",
+  "author": "hello@nooks.in",
   "license": "MIT",
   "devDependencies": {
     "babel-cli": "*",

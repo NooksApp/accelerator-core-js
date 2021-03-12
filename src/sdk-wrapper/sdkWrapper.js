@@ -1,8 +1,8 @@
 /* global OT */
-
+const OT = require("../OT");
 /* Dependencies */
-const State = require('./state');
-const { SDKError } = require('./errors');
+const State = require("./state");
+const { SDKError } = require("./errors");
 
 /* Internal variables */
 
@@ -19,10 +19,13 @@ const stateMap = new WeakMap();
  * @returns {Object}
  */
 const validateCredentials = (credentials = {}) => {
-  const required = ['apiKey', 'sessionId', 'token'];
+  const required = ["apiKey", "sessionId", "token"];
   required.forEach((credential) => {
     if (!credentials[credential]) {
-      throw new SDKError(`${credential} is a required credential`, 'invalidParameters');
+      throw new SDKError(
+        `${credential} is a required credential`,
+        "invalidParameters"
+      );
     }
   });
   return credentials;
@@ -47,9 +50,10 @@ const initPublisher = (element, properties) =>
  * @param {Function} callback
  */
 const bindListener = (target, context, event, callback) => {
-  const paramsError = '\'on\' requires a string and a function to create an event listener.';
-  if (typeof event !== 'string' || typeof callback !== 'function') {
-    throw new SDKError(paramsError, 'invalidParameters');
+  const paramsError =
+    "'on' requires a string and a function to create an event listener.";
+  if (typeof event !== "string" || typeof callback !== "function") {
+    throw new SDKError(paramsError, "invalidParameters");
   }
   target.on(event, callback.bind(context));
 };
@@ -73,7 +77,7 @@ const bindListeners = (target, context, listeners) => {
   };
 
   if (Array.isArray(listeners)) {
-    listeners.forEach(listener => createListenersFromObject(listener));
+    listeners.forEach((listener) => createListenersFromObject(listener));
   } else {
     createListenersFromObject(listeners);
   }
@@ -105,7 +109,9 @@ class OpenTokSDK {
    */
   isMe(connection) {
     const { session } = this;
-    return session && session.connection.connectionId === connection.connectionId;
+    return (
+      session && session.connection.connectionId === connection.connectionId
+    );
   }
 
   /**
@@ -117,10 +123,14 @@ class OpenTokSDK {
      * or destroyed
      */
     const state = stateMap.get(this);
-    this.session.on('streamCreated', ({ stream }) => state.addStream(stream));
-    this.session.on('streamDestroyed', ({ stream }) => state.removeStream(stream));
-    this.session.on('sessionConnected sessionReconnected', () => state.setConnected(true));
-    this.session.on('sessionDisconnected', () => state.setConnected(false));
+    this.session.on("streamCreated", ({ stream }) => state.addStream(stream));
+    this.session.on("streamDestroyed", ({ stream }) =>
+      state.removeStream(stream)
+    );
+    this.session.on("sessionConnected sessionReconnected", () =>
+      state.setConnected(true)
+    );
+    this.session.on("sessionDisconnected", () => state.setConnected(false));
   }
 
   /**
@@ -132,7 +142,7 @@ class OpenTokSDK {
    * https://tokbox.com/developer/sdks/js/reference/Session.html#on
    */
   on(...args) {
-    if (args.length === 1 && typeof args[0] === 'object') {
+    if (args.length === 1 && typeof args[0] === "object") {
       bindListeners(this.session, this, args[0]);
     } else if (args.length === 2) {
       bindListener(this.session, this, args[0], args[1]);
@@ -180,7 +190,8 @@ class OpenTokSDK {
   enableSubscriberAudio(streamId, enable) {
     const { streamMap, subscribers } = stateMap.get(this).all();
     const subscriberId = streamMap[streamId];
-    const subscriber = subscribers.camera[subscriberId] || subscribers.screen[subscriberId];
+    const subscriber =
+      subscribers.camera[subscriberId] || subscribers.screen[subscriberId];
     subscriber && subscriber.subscribeToAudio(enable);
   }
 
@@ -192,7 +203,8 @@ class OpenTokSDK {
   enableSubscriberVideo(streamId, enable) {
     const { streamMap, subscribers } = stateMap.get(this).all();
     const subscriberId = streamMap[streamId];
-    const subscriber = subscribers.camera[subscriberId] || subscribers.screen[subscriberId];
+    const subscriber =
+      subscribers.camera[subscriberId] || subscribers.screen[subscriberId];
     subscriber && subscriber.subscribeToVideo(enable);
   }
 
@@ -214,11 +226,10 @@ class OpenTokSDK {
           if (preview) {
             resolve(publisher);
           } else {
-            this.publishPreview(publisher)
-              .then(resolve)
-              .catch(reject);
+            this.publishPreview(publisher).then(resolve).catch(reject);
           }
-        }).catch(reject);
+        })
+        .catch(reject);
     });
   }
 
@@ -264,15 +275,20 @@ class OpenTokSDK {
   subscribe(stream, container, properties, eventListeners) {
     const state = stateMap.get(this);
     return new Promise((resolve, reject) => {
-      const subscriber = this.session.subscribe(stream, container, properties, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          state.addSubscriber(subscriber);
-          eventListeners && bindListeners(subscriber, this, eventListeners);
-          resolve(subscriber);
+      const subscriber = this.session.subscribe(
+        stream,
+        container,
+        properties,
+        (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            state.addSubscriber(subscriber);
+            eventListeners && bindListeners(subscriber, this, eventListeners);
+            resolve(subscriber);
+          }
         }
-      });
+      );
     });
   }
 
@@ -333,7 +349,6 @@ class OpenTokSDK {
       });
     });
   }
-
 
   /**
    * Send a signal using the OpenTok signaling apiKey
