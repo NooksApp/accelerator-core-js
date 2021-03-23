@@ -1,6 +1,6 @@
 {
   "name": "opentok-accelerator-core-nooks",
-  "version": "2.0.18",
+  "version": "2.0.22",
   "description": "Opentok Accelerator Core",
   "repository": "https://github.com/NooksApp/accelerator-core-js",
   "main": "dist/core.js",

@@ -100,6 +100,7 @@ class OpenTokSDK {
     stateMap.set(this, new State());
     this.session = OT.initSession(credentials.apiKey, credentials.sessionId);
     this.publisher = undefined;
+    this.OTSource = OT;
   }
 
   /**
@@ -221,6 +222,21 @@ class OpenTokSDK {
     return new Promise((resolve, reject) => {
       initPublisher(element, properties) // eslint-disable-next-line no-confusing-arrow
         .then((publisher) => {
+          eventListeners && bindListeners(publisher, this, eventListeners);
+          if (preview) {
+            resolve(publisher);
+          } else {
+            this.publishPreview(publisher).then(resolve).catch(reject);
+          }
+        })
+        .catch(reject);
+    });
+  }
+
+  publishInit(element, properties, eventListeners = null, preview = false) {
+    return new Promise((resolve, reject) => {
+      initPublisher(element, properties) // eslint-disable-next-line no-confusing-arrow
+        .then((publisher) => {
           this.publisher = publisher;
           eventListeners && bindListeners(publisher, this, eventListeners);
           if (preview) {
@@ -258,8 +274,11 @@ class OpenTokSDK {
     const type = publisher.stream.videoType;
     const state = stateMap.get(this);
     this.session.unpublish(publisher);
-    this.publisher = undefined;
     state.removePublisher(type, publisher);
+  }
+
+  destroyPublisher() {
+    this.publisher = undefined;
   }
 
   /**
