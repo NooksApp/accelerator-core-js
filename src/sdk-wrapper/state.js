@@ -46,7 +46,7 @@ class State {
   getCredentials() {
     return this.credentials;
   }
-    // Set the current OpenTok credentials
+  // Set the current OpenTok credentials
   setCredentials(credentials) {
     this.credentials = credentials;
   }
@@ -72,17 +72,23 @@ class State {
   pubSubCount() {
     const { publishers, subscribers } = this;
     /* eslint-disable no-param-reassign */
-    const pubs = Object.keys(publishers).reduce((acc, source) => {
-      acc[source] = Object.keys(publishers[source]).length;
-      acc.total += acc[source];
-      return acc;
-    }, { camera: 0, screen: 0, custom: 0, total: 0 });
+    const pubs = Object.keys(publishers).reduce(
+      (acc, source) => {
+        acc[source] = Object.keys(publishers[source]).length;
+        acc.total += acc[source];
+        return acc;
+      },
+      { camera: 0, screen: 0, custom: 0, total: 0 }
+    );
 
-    const subs = Object.keys(subscribers).reduce((acc, source) => {
-      acc[source] = Object.keys(subscribers[source]).length;
-      acc.total += acc[source];
-      return acc;
-    }, { camera: 0, screen: 0, custom: 0, total: 0 });
+    const subs = Object.keys(subscribers).reduce(
+      (acc, source) => {
+        acc[source] = Object.keys(subscribers[source]).length;
+        acc.total += acc[source];
+        return acc;
+      },
+      { camera: 0, screen: 0, custom: 0, total: 0 }
+    );
     /* eslint-enable no-param-reassign */
     return { publisher: pubs, subscriber: subs };
   }
@@ -119,6 +125,9 @@ class State {
   }
 
   removeSubscriber(subscriber = {}) {
+    if (!subscriber) {
+      return;
+    }
     const { stream } = subscriber;
     const type = stream && stream.videoType;
     delete this.subscribers[type][subscriber.id];
@@ -131,6 +140,7 @@ class State {
   removeStream(stream) {
     const type = stream.videoType;
     const subscriberId = this.streamMap[stream.id];
+    console.log(`[OT-internal] type=${type} subscriberId=${subscriberId}`);
     delete this.streamMap[stream.id];
     delete this.streams[stream.id];
     this.removeSubscriber(this.subscribers[type][subscriberId]);
@@ -150,7 +160,11 @@ class State {
 
   all() {
     const { streams, streamMap, connected } = this;
-    return Object.assign({}, this.getPubSub(), { streams, streamMap, connected });
+    return Object.assign({}, this.getPubSub(), {
+      streams,
+      streamMap,
+      connected,
+    });
   }
 }
 
